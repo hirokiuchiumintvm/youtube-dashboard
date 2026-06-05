@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube Realtime Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --red:#ff3030; --red-dim:rgba(255,48,48,.15); --red-border:rgba(255,48,48,.25);
+  --cyan:#00d4ff; --teal:#00b4aa; --green:#00e5a0;
+  --gold:#ffc840; --gold-dim:rgba(255,200,64,.12);
+  --g0:rgba(255,255,255,.07); --g1:rgba(255,255,255,.11);
+  --gb:rgba(255,255,255,.10); --text1:rgba(255,255,255,.95);
+  --text2:rgba(255,255,255,.55); --text3:rgba(255,255,255,.30);
+  --border:rgba(255,255,255,.09);
+}
+html,body { height:100%; background:#080d12; color:var(--text1);
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;
+  overflow:hidden; }
+
+/* BG */
+.bg { position:fixed; inset:0; z-index:0;
+  background:
+    radial-gradient(ellipse 70% 50% at 5% 15%,  rgba(0,180,170,.16) 0%,transparent 55%),
+    radial-gradient(ellipse 55% 45% at 95% 8%,  rgba(0,120,255,.12) 0%,transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 95%, rgba(0,229,160,.08) 0%,transparent 50%),
+    #080d12; }
+
+/* ─── SETUP ─── */
+#setup { position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center; }
+.setup-card { background:rgba(8,14,22,.9); backdrop-filter:blur(40px); border:1px solid var(--border);
+  border-radius:20px; padding:44px 48px; width:460px;
+  box-shadow:0 32px 80px rgba(0,0,0,.6); }
+.setup-logo { display:flex; align-items:center; gap:10px; margin-bottom:28px; }
+.setup-logo svg { width:32px; height:32px; }
+.setup-logo span { font-size:18px; font-weight:700; }
+.setup-h1 { font-size:24px; font-weight:800; letter-spacing:-.4px; margin-bottom:6px; }
+.setup-sub { font-size:13px; color:var(--text2); margin-bottom:32px; line-height:1.5; }
+.setup-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.7px;
+  color:var(--text2); margin-bottom:7px; }
+.setup-inp { width:100%; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+  border-radius:10px; padding:13px 15px; color:var(--text1); font-size:14px; outline:none;
+  font-family:inherit; margin-bottom:16px; transition:border-color .2s,box-shadow .2s; }
+.setup-inp:focus { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(0,212,255,.1); }
+.setup-inp::placeholder { color:var(--text3); }
+.setup-btn { width:100%; padding:14px; background:linear-gradient(135deg,var(--cyan),var(--teal));
+  border:none; border-radius:10px; color:#000; font-size:15px; font-weight:700;
+  cursor:pointer; font-family:inherit; transition:opacity .2s; margin-top:4px; }
+.setup-btn:hover { opacity:.9; }
+.setup-err { display:none; background:rgba(255,48,48,.1); border:1px solid var(--red-border);
+  border-radius:8px; padding:10px 13px; font-size:12px; color:#ff7070; margin-top:12px; }
+.setup-hint { font-size:11px; color:var(--text3); text-align:center; margin-top:18px; line-height:1.6; }
+
+/* ─── SHELL ─── */
+#app { position:relative; z-index:1; height:100vh; display:none; flex-direction:column;
+  padding:16px 20px 14px; gap:12px; }
+
+/* ─── HEADER ─── */
+.hdr { display:flex; align-items:center; gap:16px; flex-shrink:0; }
+.hdr-ch { display:flex; align-items:center; gap:12px; min-width:200px; }
+.hdr-av { width:44px; height:44px; border-radius:50%; border:2px solid rgba(255,255,255,.15);
+  object-fit:cover; flex-shrink:0; }
+.hdr-av-ph { width:44px; height:44px; border-radius:50%;
+  background:linear-gradient(135deg,var(--cyan),var(--teal));
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; font-weight:800; color:#000; flex-shrink:0; }
+.hdr-chname { font-size:16px; font-weight:800; letter-spacing:-.2px; line-height:1.1; }
+.hdr-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
+  color:var(--text3); }
+.hdr-divider { width:1px; height:28px; background:var(--border); flex-shrink:0; }
+
+/* Period tabs */
+.tab-group { display:flex; gap:3px; }
+.tab { padding:6px 11px; border-radius:7px; font-size:12px; font-weight:600;
+  color:var(--text2); cursor:pointer; border:1px solid transparent; transition:all .15s; }
+.tab:hover { color:var(--text1); background:var(--g0); }
+.tab.active { color:var(--text1); background:var(--g1); border-color:var(--border); }
+
+/* Type tabs */
+.type-tabs { display:flex; gap:3px; }
+.ttab { padding:6px 11px; border-radius:7px; font-size:12px; font-weight:600;
+  color:var(--text2); cursor:pointer; border:1px solid transparent; transition:all .15s; }
+.ttab:hover { color:var(--text1); background:var(--g0); }
+.ttab.active { color:#000; background:var(--red); border-color:transparent; }
+
+.hdr-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.organic-btn { display:flex; align-items:center; gap:6px; padding:6px 12px;
+  border-radius:8px; border:1px solid var(--border); background:var(--g0);
+  font-size:11px; font-weight:700; color:var(--text2); cursor:pointer;
+  transition:all .15s; white-space:nowrap; }
+.organic-btn.active { color:var(--green); border-color:rgba(0,229,160,.3);
+  background:rgba(0,229,160,.07); }
+.organic-btn svg { flex-shrink:0; }
+.live-badge { display:flex; align-items:center; gap:6px; padding:5px 12px;
+  border-radius:20px; background:var(--red-dim); border:1px solid var(--red-border);
+  font-size:11px; font-weight:800; color:var(--red); letter-spacing:.5px; white-space:nowrap; }
+.live-dot { width:6px; height:6px; border-radius:50%; background:var(--red);
+  animation:blink 1.4s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+.interval-lbl { font-size:11px; color:var(--text3); }
+.icon-btn { width:32px; height:32px; border-radius:8px; border:1px solid var(--border);
+  background:var(--g0); display:flex; align-items:center; justify-content:center;
+  cursor:pointer; color:var(--text2); transition:all .15s; }
+.icon-btn:hover { color:var(--text1); background:var(--gb); }
+
+/* ─── STATS ROW ─── */
+.stats-row { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; flex-shrink:0; }
+.stat-card { background:var(--g0); border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; position:relative; overflow:hidden; }
+.stat-card::before { content:''; position:absolute; inset:0; border-radius:inherit;
+  background:linear-gradient(135deg,rgba(255,255,255,.04) 0%,transparent 60%); pointer-events:none; }
+.stat-card .s-icon { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600;
+  color:var(--text2); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
+.stat-card .s-icon svg { opacity:.7; }
+.stat-card .s-val { font-size:28px; font-weight:900; letter-spacing:-1px; line-height:1; }
+.stat-card .s-sub { font-size:11px; color:var(--text2); margin-top:4px; min-height:14px; }
+.s-val.red { color:var(--red); }
+.s-val.white { color:var(--text1); }
+.s-val.gold { color:var(--gold); }
+.s-val.cyan { color:var(--cyan); }
+
+/* ─── CHART PANEL ─── */
+.chart-panel { background:var(--g0); border:1px solid var(--border); border-radius:14px;
+  padding:14px 18px 10px; flex:1; min-height:0; display:flex; flex-direction:column; position:relative; }
+.chart-panel-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; flex-shrink:0; }
+.chart-title { font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:.6px;
+  display:flex; align-items:center; gap:6px; }
+.chart-title svg { color:var(--red); }
+.chart-info { font-size:11px; color:var(--text3); }
+.chart-wrap { flex:1; position:relative; min-height:0; }
+
+/* ─── BOTTOM ROW ─── */
+.bottom-row { display:grid; grid-template-columns:280px 1fr 1fr; gap:10px; flex-shrink:0; height:228px; }
+
+/* Goal Panel */
+.goal-panel { background:var(--g0); border:1px solid var(--border); border-radius:14px;
+  padding:16px 18px; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+.goal-panel::before { content:''; position:absolute; inset:0; border-radius:inherit;
+  background:linear-gradient(135deg,rgba(255,255,255,.03) 0%,transparent 55%); pointer-events:none; }
+.goal-panel-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.goal-panel-title { font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:.6px;
+  display:flex; align-items:center; gap:6px; }
+.goal-edit-btn { font-size:11px; color:var(--text3); cursor:pointer; padding:3px 8px;
+  border-radius:6px; border:1px solid var(--border); background:transparent;
+  font-family:inherit; transition:all .15s; }
+.goal-edit-btn:hover { color:var(--text1); border-color:rgba(255,255,255,.2); }
+.goal-remaining { font-size:11px; color:var(--text2); margin-bottom:4px; }
+.goal-remaining span { font-size:40px; font-weight:900; letter-spacing:-2px; color:var(--cyan); }
+.goal-remaining .unit { font-size:18px; font-weight:700; color:var(--cyan); }
+.goal-bar-row { display:flex; align-items:center; gap:10px; margin:8px 0; }
+.goal-bar-bg { flex:1; height:6px; background:rgba(255,255,255,.07); border-radius:3px; overflow:hidden; }
+.goal-bar-fill { height:100%; border-radius:3px; background:linear-gradient(90deg,var(--teal),var(--cyan));
+  transition:width 1.2s cubic-bezier(.4,0,.2,1); }
+.goal-pct { font-size:13px; font-weight:800; color:var(--cyan); }
+.goal-detail { font-size:11px; color:var(--text3); }
+.goal-detail span { color:var(--text2); font-weight:600; }
+.goal-progress-lbl { font-size:10px; color:var(--text3); margin-top:auto; padding-top:8px;
+  display:flex; align-items:center; gap:5px; }
+.goal-progress-lbl::before { content:''; display:inline-block; width:6px; height:6px; border-radius:50%;
+  background:var(--green); animation:blink 2s ease-in-out infinite; }
+
+/* Latest Video Panel */
+.latest-panel { background:var(--g0); border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+.latest-panel::before { content:''; position:absolute; inset:0; border-radius:inherit;
+  background:linear-gradient(135deg,rgba(255,255,255,.03) 0%,transparent 55%); pointer-events:none; }
+.panel-title { font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:.6px;
+  margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
+.speed-badge { display:flex; align-items:center; gap:5px; padding:3px 8px; border-radius:6px;
+  background:var(--gold-dim); border:1px solid rgba(255,200,64,.2);
+  font-size:10px; font-weight:800; color:var(--gold); }
+.latest-content { display:flex; gap:12px; flex:1; }
+.latest-thumb { width:130px; height:73px; border-radius:8px; object-fit:cover; flex-shrink:0;
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.07); }
+.latest-info { flex:1; min-width:0; }
+.latest-title { font-size:13px; font-weight:700; line-height:1.4; margin-bottom:8px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.latest-viewcount { font-size:28px; font-weight:900; letter-spacing:-1px; color:var(--text1);
+  line-height:1; margin-bottom:6px; }
+.latest-meta { display:flex; align-items:center; gap:10px; font-size:11px; color:var(--text2); }
+.latest-meta .like { color:var(--gold); font-weight:600; }
+.latest-speed { font-size:11px; color:var(--text3); margin-top:6px; }
+.latest-speed span { color:var(--green); font-weight:700; }
+
+/* Ranking Panel */
+.rank-panel { background:var(--g0); border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; display:flex; flex-direction:column; overflow:hidden; position:relative; }
+.rank-panel::before { content:''; position:absolute; inset:0; border-radius:inherit;
+  background:linear-gradient(135deg,rgba(255,255,255,.03) 0%,transparent 55%); pointer-events:none; }
+.rank-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; position:relative; z-index:1; }
+.rank-list::-webkit-scrollbar { width:3px; }
+.rank-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:3px; }
+.rank-item { display:flex; align-items:center; gap:9px; padding:6px 4px; border-radius:8px;
+  transition:background .15s; cursor:default; }
+.rank-item:hover { background:rgba(255,255,255,.06); }
+.rank-item:hover .rank-title { color:var(--cyan); }
+.rank-num { font-size:13px; font-weight:900; color:var(--text3); min-width:18px; text-align:center; }
+.rank-num.gold { color:var(--gold); }
+.rank-num.silver { color:#b0b8c8; }
+.rank-num.bronze { color:#c8956a; }
+.rank-thumb { width:62px; height:35px; border-radius:5px; object-fit:cover; flex-shrink:0;
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.07); }
+.rank-info { flex:1; min-width:0; }
+.rank-title { font-size:11px; font-weight:600; line-height:1.35;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  color:var(--text1); }
+.rank-meta { font-size:10px; color:var(--text3); margin-top:2px; }
+.rank-views { font-size:13px; font-weight:800; color:var(--text1); white-space:nowrap; flex-shrink:0; }
+
+/* Footer */
+.footer { display:flex; align-items:center; justify-content:space-between;
+  font-size:11px; color:var(--text3); flex-shrink:0; padding:0 2px; }
+.footer .reset-btn { color:var(--text3); cursor:pointer; padding:3px 8px;
+  border-radius:5px; border:1px solid transparent; background:transparent; font-family:inherit; font-size:11px;
+  transition:all .15s; }
+.footer .reset-btn:hover { color:var(--text2); border-color:var(--border); }
+
+/* Loading */
+#loading { position:fixed; inset:0; z-index:100; display:none; align-items:center;
+  justify-content:center; flex-direction:column; gap:16px; }
+.spinner { width:36px; height:36px; border-radius:50%; border:3px solid rgba(255,255,255,.08);
+  border-top-color:var(--cyan); animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.spin-lbl { font-size:13px; color:var(--text2); }
+
+/* Goal edit modal */
+.modal-overlay { display:none; position:fixed; inset:0; z-index:300;
+  background:rgba(0,0,0,.6); align-items:center; justify-content:center;
+  backdrop-filter:blur(6px); }
+.modal-card { background:rgba(10,16,24,.95); border:1px solid var(--border);
+  border-radius:16px; padding:28px 32px; width:340px;
+  box-shadow:0 24px 60px rgba(0,0,0,.5); }
+.modal-h { font-size:16px; font-weight:700; margin-bottom:6px; }
+.modal-sub { font-size:12px; color:var(--text2); margin-bottom:20px; }
+.modal-inp { width:100%; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+  border-radius:10px; padding:12px 14px; color:var(--text1); font-size:18px; font-weight:700;
+  outline:none; font-family:inherit; margin-bottom:16px; }
+.modal-inp:focus { border-color:var(--cyan); }
+.modal-btns { display:flex; gap:8px; }
+.modal-cancel { flex:1; padding:11px; border-radius:9px; border:1px solid var(--border);
+  background:transparent; color:var(--text2); font-size:13px; font-weight:600;
+  cursor:pointer; font-family:inherit; transition:all .15s; }
+.modal-cancel:hover { color:var(--text1); }
+.modal-save { flex:1; padding:11px; border-radius:9px; border:none;
+  background:linear-gradient(135deg,var(--cyan),var(--teal));
+  color:#000; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+
+/* Tooltip */
+.chart-tooltip { position:absolute; pointer-events:none; z-index:50;
+  background:rgba(8,14,22,.92); border:1px solid var(--border); border-radius:10px;
+  padding:10px 13px; font-size:12px; min-width:160px;
+  backdrop-filter:blur(20px); display:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.4); }
+.tooltip-title { font-size:11px; font-weight:700; color:var(--text1); margin-bottom:6px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.tooltip-row { display:flex; justify-content:space-between; gap:12px; font-size:11px; color:var(--text2); }
+.tooltip-row span:last-child { color:var(--text1); font-weight:700; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<!-- Setup -->
+<div id="setup">
+  <div class="setup-card">
+    <div class="setup-logo">
+      <svg viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="9" fill="#ff3030"/>
+        <path d="M12.5 10.5l10 5.5-10 5.5V10.5z" fill="white"/>
+      </svg>
+      <span>YouTube Analytics</span>
+    </div>
+    <div class="setup-h1">ダッシュボード設定</div>
+    <div class="setup-sub">YouTube Data API v3 のキーとチャンネル ID を入力してください。<br>設定はブラウザに保存され、次回から自動で表示されます。</div>
+    <div class="setup-lbl">YouTube Data API v3 キー</div>
+    <input class="setup-inp" id="inp-key" type="text" placeholder="AIzaSy...">
+    <div class="setup-lbl">チャンネル ID または @ハンドル名</div>
+    <input class="setup-inp" id="inp-ch" type="text" placeholder="UCxxxxxxxx または @channelname">
+    <button class="setup-btn" onclick="onSetup()">ダッシュボードを開く →</button>
+    <div class="setup-err" id="setup-err"></div>
+    <div class="setup-hint">APIキーは Google Cloud Console で取得。<br>YouTube Data API v3 を有効化してください。</div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="spin-lbl">チャンネルデータを取得中...</div>
+</div>
+
+<!-- Goal Modal -->
+<div class="modal-overlay" id="goal-modal">
+  <div class="modal-card">
+    <div class="modal-h">目標登録者数を設定</div>
+    <div class="modal-sub">目標とする登録者数を入力してください</div>
+    <input class="modal-inp" id="goal-inp" type="number" placeholder="300000">
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeGoalModal()">キャンセル</button>
+      <button class="modal-save" onclick="saveGoal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <!-- Header -->
+  <div class="hdr">
+    <div class="hdr-ch">
+      <div id="av-wrap"></div>
+      <div>
+        <div class="hdr-label">REALTIME ANALYTICS</div>
+        <div class="hdr-chname" id="ch-name">—</div>
+      </div>
+    </div>
+    <div class="hdr-divider"></div>
+    <div class="tab-group" id="period-tabs">
+      <div class="tab" data-period="7">1週間</div>
+      <div class="tab" data-period="14">2週間</div>
+      <div class="tab" data-period="30">1ヶ月</div>
+      <div class="tab active" data-period="90">3ヶ月</div>
+      <div class="tab" data-period="180">6ヶ月</div>
+      <div class="tab" data-period="365">1年</div>
+      <div class="tab" data-period="9999">全期間</div>
+    </div>
+    <div class="hdr-divider"></div>
+    <div class="type-tabs" id="type-tabs">
+      <div class="ttab" data-type="all">全て</div>
+      <div class="ttab active" data-type="long">ロング</div>
+      <div class="ttab" data-type="short">ショート</div>
+    </div>
+    <div class="hdr-right">
+      <button class="organic-btn active" id="organic-btn" onclick="toggleOrganic()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+        オーガニックのみ
+      </button>
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        LIVE
+        <span class="interval-lbl" id="interval-lbl">・10分</span>
+      </div>
+      <div class="icon-btn" onclick="resetSettings()" title="設定">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="s-icon">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+        視聴回数
+      </div>
+      <div class="s-val red" id="s-views">—</div>
+      <div class="s-sub" id="s-views-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="s-icon">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        登録者数
+      </div>
+      <div class="s-val white" id="s-subs">—</div>
+      <div class="s-sub" id="s-subs-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="s-icon">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+        高評価合算
+      </div>
+      <div class="s-val gold" id="s-likes">—</div>
+      <div class="s-sub" id="s-likes-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="s-icon">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+        コメント合算
+      </div>
+      <div class="s-val cyan" id="s-comments">—</div>
+      <div class="s-sub" id="s-comments-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="s-icon">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
+        投稿本数
+      </div>
+      <div class="s-val white" id="s-vcount">—</div>
+      <div class="s-sub">Total Videos</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-panel">
+    <div class="chart-panel-hdr">
+      <div class="chart-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+        <span id="chart-title-lbl">直近3ヶ月の動画パフォーマンス [ロングのみ] (オーガニックのみ)</span>
+      </div>
+      <div class="chart-info" id="chart-info-lbl">—</div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="perf-chart"></canvas>
+      <div class="chart-tooltip" id="chart-tooltip"></div>
+    </div>
+  </div>
+
+  <!-- Bottom -->
+  <div class="bottom-row">
+    <!-- Goal -->
+    <div class="goal-panel">
+      <div class="goal-panel-hdr">
+        <div class="goal-panel-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="#ff3030"><path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"/></svg>
+          目標達成度
+        </div>
+        <button class="goal-edit-btn" onclick="openGoalModal()">編集</button>
+      </div>
+      <div class="goal-remaining">
+        あと <span id="goal-remaining-num">—</span><span class="unit"> 人</span>
+      </div>
+      <div class="goal-bar-row">
+        <div class="goal-bar-bg"><div class="goal-bar-fill" id="goal-bar" style="width:0%"></div></div>
+        <div class="goal-pct" id="goal-pct">—%</div>
+      </div>
+      <div class="goal-detail">
+        → 目標 <span id="goal-target-lbl">—</span> ・ 現在 <span id="goal-current-lbl">—</span>
+      </div>
+      <div class="goal-progress-lbl" id="goal-progress-lbl">増加データを蓄積中...</div>
+    </div>
+
+    <!-- Latest Video -->
+    <div class="latest-panel">
+      <div class="panel-title">
+        最新動画
+        <div class="speed-badge" id="speed-badge" style="display:none">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M13.49 5.48c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg>
+          速度 <span id="speed-rank">1位</span> / <span id="speed-total">10</span>
+        </div>
+      </div>
+      <div class="latest-content">
+        <div id="latest-thumb-wrap">
+          <div class="latest-thumb" style="display:flex;align-items:center;justify-content:center;font-size:24px;">▶</div>
+        </div>
+        <div class="latest-info">
+          <div class="latest-title" id="latest-title">読み込み中...</div>
+          <div class="latest-viewcount" id="latest-views">—</div>
+          <div class="latest-meta">
+            <span class="like" id="latest-likes">—</span>
+            <span id="latest-comments">— コメント</span>
+            <span id="latest-pubdate">—</span>
+          </div>
+          <div class="latest-speed" id="latest-speed-lbl" style="display:none">
+            再生速度: <span id="latest-speed-val">—</span> 回/日 (生涯平均)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ranking -->
+    <div class="rank-panel">
+      <div class="panel-title">
+        <span id="rank-panel-title">直近3ヶ月 視聴数ランキング（20本）</span>
+      </div>
+      <div class="rank-list" id="rank-list">
+        <div style="color:var(--text3);font-size:12px;text-align:center;padding:20px;">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span id="footer-updated">最終更新: —</span>
+    <span>通常モード・10分間隔</span>
+    <button class="reset-btn" onclick="resetSettings()">設定リセット</button>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────
+const API = 'https://www.googleapis.com/youtube/v3';
+let apiKey = '', channelId = '', uploadsId = '';
+let allVideos = []; // [{id, title, thumb, views, likes, comments, publishedAt, duration}]
+let periodDays = 90, videoType = 'long', organicOnly = true;
+let goalTarget = 0;
+let chartInstance = null;
+let refreshTimer = null;
+const thumbCache = new Map(); // サムネイル画像キャッシュ（URLをキーに再利用）
+const REFRESH_MS = 10 * 60 * 1000;
+
+// ── Boot ───────────────────────────────────────────────
+window.addEventListener('load', () => {
+  apiKey = localStorage.getItem('yt_key') || '';
+  channelId = localStorage.getItem('yt_ch') || '';
+  goalTarget = parseInt(localStorage.getItem('yt_goal') || '0');
+  if (apiKey && channelId) boot();
+  else showSetup();
+});
+
+function showSetup() { document.getElementById('setup').style.display = 'flex'; }
+function hideSetup() { document.getElementById('setup').style.display = 'none'; }
+function showLoading(v) { document.getElementById('loading').style.display = v ? 'flex' : 'none'; }
+function showApp(v) { document.getElementById('app').style.display = v ? 'flex' : 'none'; }
+
+// ── Setup ──────────────────────────────────────────────
+async function onSetup() {
+  const k = document.getElementById('inp-key').value.trim();
+  const c = document.getElementById('inp-ch').value.trim();
+  const err = document.getElementById('setup-err');
+  err.style.display = 'none';
+  if (!k || !c) { showErr('APIキーとチャンネルIDを両方入力してください。'); return; }
+  apiKey = k;
+  showLoading(true);
+  hideSetup();
+  const rid = await resolveChannel(c);
+  if (!rid) { showLoading(false); showSetup(); showErr('チャンネルが見つかりませんでした。'); return; }
+  channelId = rid;
+  localStorage.setItem('yt_key', apiKey);
+  localStorage.setItem('yt_ch', channelId);
+  boot();
+}
+function showErr(msg) {
+  const el = document.getElementById('setup-err');
+  el.textContent = msg; el.style.display = 'block';
+}
+async function resolveChannel(input) {
+  // UCで始まる場合はチャンネルIDとして直接使用
+  if (/^UC[\w-]{22}$/.test(input)) return input;
+  // @ハンドル → channels.list?forHandle (1 quota unit, search.listの100分の1)
+  const handle = input.startsWith('@') ? input : '@' + input;
+  const d = await apiFetch(`${API}/channels?part=id&forHandle=${encodeURIComponent(handle)}&key=${apiKey}`);
+  if (d?.items?.[0]?.id) return d.items[0].id;
+  // フォールバック: search.list (100 quota unit)
+  const s = await apiFetch(`${API}/search?part=snippet&type=channel&q=${encodeURIComponent(handle)}&maxResults=1&key=${apiKey}`);
+  return s?.items?.[0]?.snippet?.channelId || null;
+}
+
+// ── Boot ───────────────────────────────────────────────
+async function boot() {
+  showLoading(true);
+  try {
+    const ch = await fetchChannel();
+    if (!ch) { showLoading(false); showSetup(); showErr('チャンネル情報の取得に失敗しました。APIキーを確認してください。'); return; }
+    uploadsId = ch.contentDetails.relatedPlaylists.uploads;
+    renderHeader(ch);
+    renderStats(ch);
+    if (!goalTarget) {
+      const subs = parseInt(ch.statistics.subscriberCount || 0);
+      goalTarget = nextMilestone(subs);
+      localStorage.setItem('yt_goal', goalTarget);
+    }
+    renderGoal(parseInt(ch.statistics.subscriberCount || 0));
+    allVideos = await fetchAllVideos();
+    renderAll();
+    showLoading(false);
+    showApp(true);
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(refresh, REFRESH_MS);
+  } catch(e) {
+    console.error(e);
+    showLoading(false);
+    showSetup();
+    showErr('エラーが発生しました: ' + e.message);
+  }
+}
+
+async function refresh() {
+  try {
+    const ch = await fetchChannel();
+    if (!ch) return;
+    renderStats(ch);
+    renderGoal(parseInt(ch.statistics.subscriberCount || 0));
+    allVideos = await fetchAllVideos();
+    renderAll();
+    document.getElementById('footer-updated').textContent = '最終更新: ' + new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  } catch(e) { console.error('Refresh error', e); }
+}
+
+// ── API ────────────────────────────────────────────────
+async function apiFetch(url) {
+  const res = await fetch(url);
+  if (!res.ok) { const e = await res.json(); console.error('API err', e); return null; }
+  return res.json();
+}
+async function fetchChannel() {
+  const d = await apiFetch(`${API}/channels?part=snippet,statistics,contentDetails&id=${channelId}&key=${apiKey}`);
+  return d?.items?.[0] || null;
+}
+async function fetchAllVideos() {
+  // 常に200本を上限に取得（期間切替に左右されないよう固定）
+  // quota: playlistItems×4回 + videos×4回 = 約8 quota/回
+  const MAX = 200;
+  const items = [];
+  let pageToken = '';
+  while (items.length < MAX) {
+    const url = `${API}/playlistItems?part=snippet&playlistId=${uploadsId}&maxResults=50`
+      + (pageToken ? `&pageToken=${pageToken}` : '') + `&key=${apiKey}`;
+    const d = await apiFetch(url);
+    if (!d?.items?.length) break;
+    items.push(...d.items);
+    if (!d.nextPageToken || items.length >= MAX) break;
+    pageToken = d.nextPageToken;
+  }
+  if (items.length === 0) return [];
+
+  // videos APIは50件/リクエスト上限 → チャンク処理
+  const statsMap = {};
+  for (let i = 0; i < items.length; i += 50) {
+    const ids = items.slice(i, i + 50).map(x => x.snippet.resourceId.videoId).join(',');
+    const sd = await apiFetch(`${API}/videos?part=statistics,snippet,contentDetails&id=${ids}&key=${apiKey}`);
+    (sd?.items || []).forEach(v => { statsMap[v.id] = v; });
+  }
+
+  return items.map(item => {
+    const vid = item.snippet.resourceId.videoId;
+    const sv = statsMap[vid];
+    const dur = sv?.contentDetails?.duration || '';
+    const title = sv?.snippet?.title || item.snippet.title;
+    const description = sv?.snippet?.description || '';
+    return {
+      id: vid,
+      title,
+      thumb: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url || '',
+      views: parseInt(sv?.statistics?.viewCount || 0),
+      likes: parseInt(sv?.statistics?.likeCount || 0),
+      comments: parseInt(sv?.statistics?.commentCount || 0),
+      // videos APIの公開日を優先（playlistItemsの日付とズレることがある）
+      publishedAt: sv?.snippet?.publishedAt || item.snippet.publishedAt,
+      duration: dur,
+      isShort: isShortVideo(dur, title, description)
+    };
+  });
+}
+
+function isShortVideo(dur, title = '', description = '') {
+  // 判定1: タイトル・説明文の #shorts タグ（最も確実）
+  if (/#shorts?\b/i.test(title) || /#shorts?\b/i.test(description)) return true;
+  // 判定2: 60秒以下（YouTube Shortsの公式基準、3分対応前の仕様）
+  const m = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return false;
+  const total = (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
+  return total > 0 && total <= 60;
+}
+
+// ── Render Header ──────────────────────────────────────
+function renderHeader(ch) {
+  const s = ch.snippet;
+  document.getElementById('ch-name').textContent = s.title;
+  const thumb = s.thumbnails?.high?.url || s.thumbnails?.default?.url;
+  const wrap = document.getElementById('av-wrap');
+  if (thumb) {
+    wrap.innerHTML = `<img class="hdr-av" src="${thumb}" alt="${esc(s.title)}">`;
+  } else {
+    wrap.innerHTML = `<div class="hdr-av-ph">${s.title.charAt(0).toUpperCase()}</div>`;
+  }
+}
+
+// ── Render Stats ───────────────────────────────────────
+function renderStats(ch) {
+  const st = ch.statistics;
+  const views = parseInt(st.viewCount || 0);
+  const subs = parseInt(st.subscriberCount || 0);
+  const vcount = parseInt(st.videoCount || 0);
+  document.getElementById('s-views').textContent = fmt(views);
+  document.getElementById('s-views-sub').textContent = '—';
+  document.getElementById('s-subs').textContent = fmt(subs) + '人';
+  document.getElementById('s-subs-sub').textContent = '±0 /28日';
+  document.getElementById('s-vcount').textContent = vcount.toLocaleString('ja-JP');
+  // likes/comments will be updated from videos
+  document.getElementById('footer-updated').textContent =
+    '最終更新: ' + new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+// ── Render All (filtered) ──────────────────────────────
+function renderAll() {
+  const filtered = filterVideos(allVideos);
+  renderEngagementStats(filtered);
+  renderChart(filtered);
+  renderLatestVideo();
+  renderRanking(filtered);
+  updateChartLabel();
+}
+
+function filterVideos(videos) {
+  let cutoffMs;
+  if (periodDays < 9999) {
+    // JST基準で「N日前の0時0分0秒」をUTCミリ秒で計算
+    // new Date() → ローカル時刻(JST)でN日前の日付を取り、その日の00:00:00 JSTに固定
+    const d = new Date();
+    d.setDate(d.getDate() - periodDays);
+    d.setHours(0, 0, 0, 0); // JST 0時 = UTC前日15時
+    cutoffMs = d.getTime();
+  } else {
+    cutoffMs = new Date('2000-01-01').getTime();
+  }
+  return videos.filter(v => {
+    const pubMs = new Date(v.publishedAt).getTime();
+    if (pubMs < cutoffMs) return false;
+    if (videoType === 'long') return !v.isShort;
+    if (videoType === 'short') return v.isShort;
+    return true;
+  });
+}
+
+function renderEngagementStats(videos) {
+  const totalLikes = videos.reduce((s,v) => s + v.likes, 0);
+  const totalComments = videos.reduce((s,v) => s + v.comments, 0);
+  document.getElementById('s-likes').textContent = fmt(totalLikes);
+  document.getElementById('s-likes-sub').textContent = '—';
+  document.getElementById('s-comments').textContent = fmt(totalComments);
+  document.getElementById('s-comments-sub').textContent = '—';
+}
+
+// ── Chart ──────────────────────────────────────────────
+function renderChart(videos) {
+  const sorted = [...videos].sort((a,b) => new Date(a.publishedAt) - new Date(b.publishedAt));
+  if (sorted.length === 0) { renderEmptyChart(); return; }
+
+  const labels = sorted.map(v => {
+    const d = new Date(v.publishedAt);
+    return `${d.getMonth()+1}/${d.getDate()}`;
+  });
+  const data = sorted.map(v => v.views);
+
+  // サムネイル描画プラグイン
+  // ★ グローバル登録せずチャートインスタンスに直接渡す（staleクロージャ防止）
+  const thumbPlugin = {
+    id: 'thumbs',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      const W = 64, H = 36;
+      meta.data.forEach((point, i) => {
+        const v = sorted[i];
+        if (!v?.thumb) return;
+        const x = point.x - W/2, y = point.y - H - 14;
+        const drawImg = (img) => {
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(x, y, W, H, 4);
+          ctx.clip();
+          ctx.drawImage(img, x, y, W, H);
+          ctx.restore();
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,48,48,.6)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.roundRect(x, y, W, H, 4);
+          ctx.stroke();
+          ctx.restore();
+          ctx.save();
+          ctx.fillStyle = 'rgba(0,0,0,.75)';
+          ctx.beginPath();
+          ctx.roundRect(x, y + H - 12, W, 12, [0,0,4,4]);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.font = '700 9px -apple-system,sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(fmt(v.views), x + W/2, y + H - 3);
+          ctx.restore();
+        };
+        if (thumbCache.has(v.thumb)) {
+          drawImg(thumbCache.get(v.thumb));
+        } else {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => { thumbCache.set(v.thumb, img); chart.update('none'); };
+          img.src = v.thumb;
+        }
+      });
+    }
+  };
+
+  const canvas = document.getElementById('perf-chart');
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  chartInstance = new Chart(canvas, {
+    type: 'line',
+    plugins: [thumbPlugin], // ★ インライン登録（staleクロージャ防止、グローバル汚染なし）
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderColor: '#ff3030',
+        borderWidth: 2,
+        pointBackgroundColor: '#ff3030',
+        pointBorderColor: 'rgba(8,13,18,.8)',
+        pointBorderWidth: 2,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        tension: 0.3,
+        fill: true,
+        backgroundColor: (ctx) => {
+          const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, ctx.chart.height);
+          g.addColorStop(0, 'rgba(255,48,48,.18)');
+          g.addColorStop(1, 'rgba(255,48,48,.0)');
+          return g;
+        }
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 600 },
+      layout: { padding: { top: 55, left: 4, right: 4, bottom: 4 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,.04)', drawBorder: false },
+          ticks: { color: 'rgba(255,255,255,.35)', font: { size: 10 }, maxRotation: 0,
+            autoSkip: true, maxTicksLimit: 12 },
+          border: { display: false }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,.04)', drawBorder: false },
+          ticks: { color: 'rgba(255,255,255,.35)', font: { size: 10 },
+            callback: v => fmt(v) },
+          border: { display: false }
+        }
+      },
+      onHover: (evt, els) => {
+        const tip = document.getElementById('chart-tooltip');
+        if (!els.length) { tip.style.display = 'none'; return; }
+        const idx = els[0].index;
+        const v = sorted[idx];
+        const rect = canvas.getBoundingClientRect();
+        const chartRect = chartInstance.canvas.getBoundingClientRect();
+        const x = els[0].element.x, y = els[0].element.y;
+        tip.style.display = 'block';
+        tip.style.left = Math.min(x + 8, chartInstance.width - 180) + 'px';
+        tip.style.top = (y - 10) + 'px';
+        tip.innerHTML = `
+          <div class="tooltip-title">${esc(v.title)}</div>
+          <div class="tooltip-row"><span>再生回数</span><span>${fmt(v.views)}</span></div>
+          <div class="tooltip-row"><span>いいね</span><span>${fmt(v.likes)}</span></div>
+          <div class="tooltip-row"><span>コメント</span><span>${fmt(v.comments)}</span></div>
+          <div class="tooltip-row"><span>公開日</span><span>${fmtDate(v.publishedAt)}</span></div>`;
+      }
+    }
+  });
+
+  // Chart info
+  const total = data.reduce((s,v) => s+v, 0);
+  document.getElementById('chart-info-lbl').textContent =
+    `${sorted.length} 本・累計 ${fmt(total)} 回再生`;
+}
+
+function renderEmptyChart() {
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  const canvas = document.getElementById('perf-chart');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = 'rgba(255,255,255,.2)';
+  ctx.font = '14px -apple-system';
+  ctx.textAlign = 'center';
+  ctx.fillText('この期間の動画データがありません', canvas.width/2, canvas.height/2);
+  document.getElementById('chart-info-lbl').textContent = '0 本';
+}
+
+function updateChartLabel() {
+  const typeLabel = videoType === 'long' ? 'ロングのみ' : videoType === 'short' ? 'ショートのみ' : '全て';
+  const organicLabel = organicOnly ? ' (オーガニックのみ)' : '';
+  const periodLabel = periodDays >= 9999 ? '全期間' : `直近${periodDays >= 365 ? Math.round(periodDays/365)+'年' : periodDays >= 30 ? Math.round(periodDays/30)+'ヶ月' : periodDays+'日'}`;
+  document.getElementById('chart-title-lbl').textContent =
+    `${periodLabel}の動画パフォーマンス [${typeLabel}]${organicLabel}`;
+  const typeLabel2 = periodDays >= 9999 ? '全期間' : periodLabel;
+  document.getElementById('rank-panel-title').textContent =
+    `${typeLabel2} 視聴数ランキング（${Math.min(filterVideos(allVideos).length, 20)}本）`;
+}
+
+// ── Latest Video ───────────────────────────────────────
+function renderLatestVideo() {
+  if (allVideos.length === 0) return;
+  const v = allVideos[0]; // most recent
+  document.getElementById('latest-title').textContent = v.title;
+  document.getElementById('latest-views').textContent = v.views.toLocaleString('ja-JP') + ' 回';
+  document.getElementById('latest-likes').textContent = '👍 ' + fmt(v.likes);
+  document.getElementById('latest-comments').textContent = fmt(v.comments) + ' コメント';
+  const daysSince = Math.max(1, Math.round((new Date() - new Date(v.publishedAt)) / 86400000));
+  document.getElementById('latest-pubdate').textContent = '公開: ' + fmtRelDate(v.publishedAt);
+  const vps = Math.round(v.views / daysSince);
+  const thumbWrap = document.getElementById('latest-thumb-wrap');
+  if (v.thumb) {
+    thumbWrap.innerHTML = `<img class="latest-thumb" src="${v.thumb}" alt="${esc(v.title)}" style="cursor:pointer;" onclick="window.open('https://www.youtube.com/watch?v=${v.id}','_blank')">`;
+  }
+  // タイトルクリックでも飛べるように
+  const titleEl = document.getElementById('latest-title');
+  titleEl.style.cursor = 'pointer';
+  titleEl.onclick = () => window.open(`https://www.youtube.com/watch?v=${v.id}`, '_blank');
+  // Speed rank among filtered (last 10)
+  const recent = filterVideos(allVideos).slice(0, 10);
+  const speedRanked = recent.map(rv => ({
+    id: rv.id,
+    vps: Math.round(rv.views / Math.max(1, Math.round((new Date() - new Date(rv.publishedAt)) / 86400000)))
+  })).sort((a,b) => b.vps - a.vps);
+  const rank = speedRanked.findIndex(r => r.id === v.id) + 1;
+  if (rank > 0) {
+    document.getElementById('speed-badge').style.display = 'flex';
+    document.getElementById('speed-rank').textContent = rank + '位';
+    document.getElementById('speed-total').textContent = recent.length;
+    document.getElementById('latest-speed-lbl').style.display = 'block';
+    document.getElementById('latest-speed-val').textContent = fmt(vps);
+  }
+}
+
+// ── Ranking ────────────────────────────────────────────
+function renderRanking(filtered) {
+  const top = [...filtered].sort((a,b) => b.views - a.views).slice(0, 20);
+  const list = document.getElementById('rank-list');
+  if (top.length === 0) { list.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:20px;">データなし</div>'; return; }
+  list.innerHTML = top.map((v, i) => {
+    const numCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    const likesStr = v.likes > 0 ? `👍 ${fmt(v.likes)}` : '';
+    const cmtStr = v.comments > 0 ? `💬 ${v.comments}` : '';
+    return `
+      <div class="rank-item" onclick="window.open('https://www.youtube.com/watch?v=${v.id}','_blank')" style="cursor:pointer;">
+        <div class="rank-num ${numCls}">${i+1}</div>
+        ${v.thumb ? `<img class="rank-thumb" src="${v.thumb}" alt="${esc(v.title)}" loading="lazy">` : '<div class="rank-thumb" style="display:flex;align-items:center;justify-content:center;font-size:14px;">▶</div>'}
+        <div class="rank-info">
+          <div class="rank-title">${esc(v.title)}</div>
+          <div class="rank-meta">${[likesStr, cmtStr].filter(Boolean).join(' · ')}</div>
+        </div>
+        <div class="rank-views">${fmt(v.views)}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Goal ───────────────────────────────────────────────
+function renderGoal(subs) {
+  if (!goalTarget) goalTarget = nextMilestone(subs);
+  const remaining = Math.max(0, goalTarget - subs);
+  const pct = Math.min(100, (subs / goalTarget) * 100);
+  document.getElementById('goal-remaining-num').textContent = fmt(remaining);
+  document.getElementById('goal-bar').style.width = pct.toFixed(1) + '%';
+  document.getElementById('goal-pct').textContent = pct.toFixed(1) + '%';
+  document.getElementById('goal-target-lbl').textContent = fmt(goalTarget) + '人';
+  document.getElementById('goal-current-lbl').textContent = fmt(subs) + '人';
+}
+function nextMilestone(n) {
+  const ms = [1000,5000,10000,50000,100000,300000,500000,1000000,3000000,5000000,10000000];
+  return ms.find(m => m > n) || ms[ms.length-1];
+}
+function openGoalModal() {
+  document.getElementById('goal-inp').value = goalTarget || '';
+  document.getElementById('goal-modal').style.display = 'flex';
+}
+function closeGoalModal() { document.getElementById('goal-modal').style.display = 'none'; }
+function saveGoal() {
+  const v = parseInt(document.getElementById('goal-inp').value);
+  if (v > 0) { goalTarget = v; localStorage.setItem('yt_goal', v); }
+  closeGoalModal();
+  // re-render goal with cached subs
+  const subsEl = document.getElementById('s-subs').textContent.replace(/[^0-9.万億KM]/g,'');
+  refresh();
+}
+
+// ── Tabs ───────────────────────────────────────────────
+document.getElementById('period-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  document.querySelectorAll('#period-tabs .tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  periodDays = parseInt(tab.dataset.period);
+  renderAll();
+});
+document.getElementById('type-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.ttab');
+  if (!tab) return;
+  document.querySelectorAll('#type-tabs .ttab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  videoType = tab.dataset.type;
+  renderAll();
+});
+function toggleOrganic() {
+  organicOnly = !organicOnly;
+  document.getElementById('organic-btn').classList.toggle('active', organicOnly);
+  renderAll();
+}
+
+// ── Reset ──────────────────────────────────────────────
+function resetSettings() {
+  if (!confirm('設定をリセットして再入力画面に戻りますか？')) return;
+  localStorage.removeItem('yt_key'); localStorage.removeItem('yt_ch');
+  clearInterval(refreshTimer);
+  showApp(false);
+  showSetup();
+}
+
+// ── Helpers ────────────────────────────────────────────
+function fmt(n) {
+  n = Number(n);
+  if (n >= 1e8) return (n/1e8).toFixed(1).replace(/\.0$/,'') + '億';
+  if (n >= 1e4) return (n/1e4).toFixed(1).replace(/\.0$/,'') + '万';
+  if (n >= 1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'') + 'K';
+  return n.toLocaleString('ja-JP');
+}
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('ja-JP',{year:'numeric',month:'short',day:'numeric'});
+}
+function fmtRelDate(iso) {
+  const d = new Date(iso);
+  const diff = Math.floor((new Date()-d)/1000);
+  if (diff < 3600) return Math.floor(diff/60) + ' 分前';
+  if (diff < 86400) return Math.floor(diff/3600) + ' 時間前';
+  if (diff < 86400*7) return Math.floor(diff/86400) + ' 日前';
+  return fmtDate(iso);
+}
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Enter key on setup
+['inp-key','inp-ch'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keydown', e => { if (e.key==='Enter') onSetup(); });
+});
+</script>
+</body>
+</html>
